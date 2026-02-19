@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DynamicLock</string>
+
+    <string name="notification_listener_description">
+        Allows DynamicLock to detect currently playing Spotify songs
+    </string>
+</resources>
