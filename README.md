@@ -33,7 +33,7 @@ That's it. No setup. No fuss.
 
 DynamicLock only uses **Notification Access** to read Spotify's album art from your local media session. It does not read, store or transmit any of your notifications or personal data.
 
-**Don't trust us? Good. Read the code yourself. Every single line is open source.**
+**Don't trust me? Good. Read the code yourself. Every single line is open source.**
 
 ---
 
@@ -124,19 +124,9 @@ Please include:
 - Relevant logs (`adb logcat -s "DynamicLock"`)
 
 ---
-
 ## 📄 License
 
-```
-MIT License
-
-Copyright (c) 2026 mclovin22117
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software to deal in the Software without restriction, including without
-limitation the rights to use, copy, modify, merge, publish, distribute,
-sublicense, and/or sell copies of the Software.
-```
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
 
 ---
 
