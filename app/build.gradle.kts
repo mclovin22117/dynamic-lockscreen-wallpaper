@@ -14,6 +14,10 @@ if (localPropertiesFile.exists()) {
 
 val spotifyCoverApiBaseUrl = (localProperties.getProperty("spotify.cover.api.baseUrl") ?: "").trim()
 val spotifyCoverApiAuthToken = (localProperties.getProperty("spotify.cover.api.authToken") ?: "").trim()
+val spotifyCoverApiBaseUrlDebug = (localProperties.getProperty("spotify.cover.api.baseUrl.debug") ?: spotifyCoverApiBaseUrl).trim()
+val spotifyCoverApiAuthTokenDebug = (localProperties.getProperty("spotify.cover.api.authToken.debug") ?: spotifyCoverApiAuthToken).trim()
+val spotifyCoverApiBaseUrlRelease = (localProperties.getProperty("spotify.cover.api.baseUrl.release") ?: "").trim()
+val spotifyCoverApiAuthTokenRelease = (localProperties.getProperty("spotify.cover.api.authToken.release") ?: "").trim()
 
 plugins {
     alias(libs.plugins.android.application)
@@ -33,8 +37,8 @@ android {
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "SPOTIFY_COVER_API_BASE_URL", "\"$spotifyCoverApiBaseUrl\"")
-        buildConfigField("String", "SPOTIFY_COVER_API_AUTH_TOKEN", "\"$spotifyCoverApiAuthToken\"")
+        buildConfigField("String", "SPOTIFY_COVER_API_BASE_URL", "\"\"")
+        buildConfigField("String", "SPOTIFY_COVER_API_AUTH_TOKEN", "\"\"")
     }
 
     signingConfigs {
@@ -47,9 +51,15 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "SPOTIFY_COVER_API_BASE_URL", "\"$spotifyCoverApiBaseUrlDebug\"")
+            buildConfigField("String", "SPOTIFY_COVER_API_AUTH_TOKEN", "\"$spotifyCoverApiAuthTokenDebug\"")
+        }
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("release")
+            buildConfigField("String", "SPOTIFY_COVER_API_BASE_URL", "\"$spotifyCoverApiBaseUrlRelease\"")
+            buildConfigField("String", "SPOTIFY_COVER_API_AUTH_TOKEN", "\"$spotifyCoverApiAuthTokenRelease\"")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
