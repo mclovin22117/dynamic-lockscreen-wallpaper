@@ -14,6 +14,7 @@ import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.renderscript.Allocation
@@ -184,34 +185,53 @@ class SpotifyNotificationListener : NotificationListenerService() {
     }
 
     private fun getHighResAlbumArtFromUri(metadata: MediaMetadata): Bitmap? {
-        val artUri = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
+        val artUriString = metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI)
+            ?: metadata.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
             ?: metadata.getString(MediaMetadata.METADATA_KEY_ART_URI)
             ?: return null
 
-        return try {
-            val connection = (URL(artUri).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 3000
-                readTimeout = 5000
-                doInput = true
-                instanceFollowRedirects = true
-            }
+        val uri = Uri.parse(artUriString)
+        val options = BitmapFactory.Options().apply {
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+            inScaled = false
+        }
 
-            connection.connect()
-            val stream = connection.inputStream
-            val options = BitmapFactory.Options().apply {
-                inPreferredConfig = Bitmap.Config.ARGB_8888
-                inScaled = false
+        return try {
+            val bitmap = when (uri.scheme?.lowercase()) {
+                "content", "file", "android.resource" -> {
+                    contentResolver.openInputStream(uri)?.use { stream ->
+                        BitmapFactory.decodeStream(stream, null, options)
+                    }
+                }
+                "http", "https" -> {
+                    val connection = (URL(artUriString).openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 3000
+                        readTimeout = 5000
+                        doInput = true
+                        instanceFollowRedirects = true
+                    }
+                    connection.connect()
+                    val decoded = connection.inputStream.use { stream ->
+                        BitmapFactory.decodeStream(stream, null, options)
+                    }
+                    connection.disconnect()
+                    decoded
+                }
+                else -> {
+                    Log.w("DynamicLock", "Unsupported art URI scheme: ${uri.scheme}")
+                    null
+                }
             }
-            val bitmap = BitmapFactory.decodeStream(stream, null, options)
-            stream.close()
-            connection.disconnect()
 
             if (bitmap != null) {
-                Log.d("DynamicLock", "Using metadata URI art: ${bitmap.width}x${bitmap.height}")
+                Log.d(
+                    "DynamicLock",
+                    "Using metadata URI art (${uri.scheme}): ${bitmap.width}x${bitmap.height}"
+                )
             }
             bitmap
         } catch (e: Exception) {
-            Log.w("DynamicLock", "Album art URI fetch failed: ${e.message}")
+            Log.w("DynamicLock", "Album art URI fetch failed (${uri.scheme}): ${e.message}")
             null
         }
     }
@@ -268,7 +288,8 @@ class SpotifyNotificationListener : NotificationListenerService() {
         }
 
         // Try metadata art
-        val bitmap = freshMetadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+        val bitmap = freshMetadata.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+            ?: freshMetadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
             ?: freshMetadata.getBitmap(MediaMetadata.METADATA_KEY_ART)
 
         if (bitmap != null) {
