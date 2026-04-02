@@ -6,6 +6,15 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(keystorePropertiesFile.inputStream())
 }
 
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(localPropertiesFile.inputStream())
+}
+
+val spotifyCoverApiBaseUrl = (localProperties.getProperty("spotify.cover.api.baseUrl") ?: "").trim()
+val spotifyCoverApiAuthToken = (localProperties.getProperty("spotify.cover.api.authToken") ?: "").trim()
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -23,6 +32,9 @@ android {
         versionCode = 1
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "SPOTIFY_COVER_API_BASE_URL", "\"$spotifyCoverApiBaseUrl\"")
+        buildConfigField("String", "SPOTIFY_COVER_API_AUTH_TOKEN", "\"$spotifyCoverApiAuthToken\"")
     }
 
     signingConfigs {
@@ -56,6 +68,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

@@ -17,6 +17,7 @@ import android.media.session.PlaybackState
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import com.example.dynamiclock.BuildConfig
 import android.renderscript.Allocation
 import android.renderscript.Element
 import android.renderscript.RenderScript
@@ -24,6 +25,8 @@ import android.renderscript.ScriptIntrinsicBlur
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import org.json.JSONObject
+import java.net.URLEncoder
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -236,6 +239,107 @@ class SpotifyNotificationListener : NotificationListenerService() {
         }
     }
 
+    private fun extractTrackId(metadata: MediaMetadata): String? {
+        val mediaUri = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
+            ?: metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
+            ?: return null
+
+        return when {
+            mediaUri.startsWith("spotify:track:") -> mediaUri.substringAfterLast(":")
+            mediaUri.contains("open.spotify.com/track/") -> {
+                Uri.parse(mediaUri).lastPathSegment
+            }
+            mediaUri.length >= 10 -> mediaUri
+            else -> null
+        }
+    }
+
+    private fun fetchAlbumArtFromBackend(trackId: String): Bitmap? {
+        val baseUrl = BuildConfig.SPOTIFY_COVER_API_BASE_URL.trim()
+        if (baseUrl.isEmpty()) {
+            Log.d("DynamicLock", "Backend URL not configured, skipping backend fetch")
+            return null
+        }
+
+        Log.d("DynamicLock", "Fetching album art from backend for track: $trackId")
+
+        return try {
+            val cleanBaseUrl = baseUrl.trimEnd('/')
+            val requestUrl = "$cleanBaseUrl/cover?trackId=${URLEncoder.encode(trackId, "UTF-8")}"
+            Log.d("DynamicLock", "Backend request URL: $requestUrl")
+            
+            val connection = (URL(requestUrl).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 4000
+                readTimeout = 6000
+                requestMethod = "GET"
+                doInput = true
+                instanceFollowRedirects = true
+
+                val apiToken = BuildConfig.SPOTIFY_COVER_API_AUTH_TOKEN.trim()
+                if (apiToken.isNotEmpty()) {
+                    setRequestProperty("X-API-Token", apiToken)
+                }
+            }
+
+            connection.connect()
+
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+                Log.w("DynamicLock", "Backend cover request failed: ${connection.responseCode}")
+                connection.disconnect()
+                return null
+            }
+
+            val responseBody = connection.inputStream.bufferedReader().use { it.readText() }
+            connection.disconnect()
+
+            Log.d("DynamicLock", "Backend response: $responseBody")
+
+            val json = JSONObject(responseBody)
+            val imageUrl = json.optString("imageUrl", "")
+            if (imageUrl.isBlank()) {
+                Log.w("DynamicLock", "Backend response missing imageUrl")
+                return null
+            }
+
+            Log.d("DynamicLock", "Backend returned image URL: $imageUrl")
+
+            val imageConnection = (URL(imageUrl).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 4000
+                readTimeout = 6000
+                doInput = true
+                instanceFollowRedirects = true
+            }
+
+            imageConnection.connect()
+            if (imageConnection.responseCode != HttpURLConnection.HTTP_OK) {
+                Log.w("DynamicLock", "Album image download failed: ${imageConnection.responseCode}")
+                imageConnection.disconnect()
+                return null
+            }
+
+            val options = BitmapFactory.Options().apply {
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+                inScaled = false
+            }
+            val bitmap = imageConnection.inputStream.use { stream ->
+                BitmapFactory.decodeStream(stream, null, options)
+            }
+            imageConnection.disconnect()
+
+            if (bitmap != null) {
+                Log.d(
+                    "DynamicLock",
+                    "Using backend cover art: ${bitmap.width}x${bitmap.height}"
+                )
+            }
+            bitmap
+        } catch (e: Exception) {
+            Log.w("DynamicLock", "Backend album art fetch failed: ${e.javaClass.simpleName}: ${e.message}")
+            e.printStackTrace()
+            null
+        }
+    }
+
     private fun processMetadata(metadata: MediaMetadata) {
         val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE)
         val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST)
@@ -271,6 +375,37 @@ class SpotifyNotificationListener : NotificationListenerService() {
             Log.w("DynamicLock", "No fresh metadata available")
             return
         }
+
+        val trackId = extractTrackId(freshMetadata)
+        if (trackId != null) {
+            // Backend HTTP fetch must run off main thread.
+            Thread {
+                if (wallpaperGeneration != generation) return@Thread
+                val backendBitmap = fetchAlbumArtFromBackend(trackId)
+                if (wallpaperGeneration != generation) return@Thread
+
+                if (backendBitmap != null) {
+                    setLockWallpaper(backendBitmap, generation)
+                    return@Thread
+                }
+
+                handler.post {
+                    if (wallpaperGeneration != generation) return@post
+                    fetchLocalArtAndSetWallpaper(freshMetadata, generation, attempt)
+                }
+            }.start()
+            return
+        }
+
+        fetchLocalArtAndSetWallpaper(freshMetadata, generation, attempt)
+    }
+
+    private fun fetchLocalArtAndSetWallpaper(
+        freshMetadata: MediaMetadata,
+        generation: Int,
+        attempt: Int,
+    ) {
+        if (wallpaperGeneration != generation) return
 
         // Try metadata album-art URL first (usually highest quality from Spotify CDN).
         val uriBitmap = getHighResAlbumArtFromUri(freshMetadata)
@@ -398,9 +533,9 @@ class SpotifyNotificationListener : NotificationListenerService() {
         paint.isFilterBitmap = true
         paint.isDither = true
 
-        // Keep art visually large, but still avoid extreme upscaling on very small covers.
-        val desiredArtSize = (targetWidth * 0.78f).toInt()
-        val minVisualSize = (targetWidth * 0.62f).toInt()
+        // Keep art visually dominant while still limiting extreme upscale artifacts.
+        val desiredArtSize = (targetWidth * 0.90f).toInt()
+        val minVisualSize = (targetWidth * 0.72f).toInt()
         val sourceMinSide = minOf(albumArt.width, albumArt.height)
         val maxSharpSize = (sourceMinSide * 1.8f).toInt().coerceAtLeast(1)
         val artSize = minOf(desiredArtSize, maxOf(minVisualSize, maxSharpSize))
