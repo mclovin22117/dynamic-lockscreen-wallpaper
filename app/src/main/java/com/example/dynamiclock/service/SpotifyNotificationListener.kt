@@ -5,6 +5,7 @@ import android.app.WallpaperManager
 import android.content.ComponentName
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Path
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
@@ -276,12 +277,12 @@ class SpotifyNotificationListener : NotificationListenerService() {
     }
 
     // Blur using reused RenderScript instance
-    private fun blurBitmap(source: Bitmap, radius: Float = 25f): Bitmap {
-        // Aggressively scale down — we work at 1/8 size for blur background
-        val scaledWidth = (source.width / 8).coerceAtLeast(1)
-        val scaledHeight = (source.height / 8).coerceAtLeast(1)
+    private fun blurBitmap(source: Bitmap, radius: Float = 16f): Bitmap {
+        // Quality-focused blur: use 1/4 scale to retain more detail in the background texture.
+        val scaledWidth = (source.width / 4).coerceAtLeast(1)
+        val scaledHeight = (source.height / 4).coerceAtLeast(1)
 
-        val scaledBitmap = Bitmap.createScaledBitmap(source, scaledWidth, scaledHeight, false)
+        val scaledBitmap = Bitmap.createScaledBitmap(source, scaledWidth, scaledHeight, true)
         val blurredBitmap = scaledBitmap.copy(Bitmap.Config.ARGB_8888, true)
 
         try {
@@ -304,11 +305,10 @@ class SpotifyNotificationListener : NotificationListenerService() {
         return blurredBitmap
     }
 
-    // Compose at HALF screen resolution — Android scales wallpaper anyway
+    // Compose at full screen resolution for maximum sharpness on lock screen.
     private fun composeWallpaper(albumArt: Bitmap, screenWidth: Int, screenHeight: Int): Bitmap {
-        // Work at half resolution — massive performance gain
-        val targetWidth = screenWidth / 2
-        val targetHeight = screenHeight / 2
+        val targetWidth = screenWidth
+        val targetHeight = screenHeight
 
         val paint = Paint().apply {
             isAntiAlias = true
@@ -326,15 +326,16 @@ class SpotifyNotificationListener : NotificationListenerService() {
         // Draw blurred background
         canvas.drawBitmap(bgBitmap, 0f, 0f, paint)
 
-        // Dark overlay for depth
-        paint.color = android.graphics.Color.argb(120, 0, 0, 0)
+        // Lighter overlay keeps contrast while preserving richer color.
+        paint.color = android.graphics.Color.argb(60, 0, 0, 0)
         canvas.drawRect(0f, 0f, targetWidth.toFloat(), targetHeight.toFloat(), paint)
         paint.reset()
         paint.isAntiAlias = true
         paint.isFilterBitmap = true
+        paint.isDither = true
 
-        // Album art: 80% of width, centered
-        val artSize = (targetWidth * 0.80f).toInt()
+        // Album art: slightly smaller for better visual balance and less perceived softness.
+        val artSize = (targetWidth * 0.75f).toInt()
         val left = (targetWidth - artSize) / 2f
         val top = (targetHeight - artSize) / 2f
 
@@ -345,11 +346,14 @@ class SpotifyNotificationListener : NotificationListenerService() {
         }
         canvas.drawRoundRect(RectF(left, top, left + artSize, top + artSize), 24f, 24f, shadowPaint)
 
-        // Draw album art with rounded corners directly — no intermediate bitmap
+        // Draw album art with true rounded-corner clipping.
         val srcRect = Rect(0, 0, albumArt.width, albumArt.height)
         val dstRectF = RectF(left, top, left + artSize, top + artSize)
+        val clipPath = Path().apply {
+            addRoundRect(dstRectF, 24f, 24f, Path.Direction.CW)
+        }
         canvas.save()
-        canvas.clipRect(dstRectF)
+        canvas.clipPath(clipPath)
         canvas.drawBitmap(albumArt, srcRect, dstRectF, paint)
         canvas.restore()
 
