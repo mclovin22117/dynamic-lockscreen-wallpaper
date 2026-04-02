@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.WallpaperManager
 import android.content.ComponentName
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Path
 import android.graphics.Paint
@@ -22,6 +23,8 @@ import android.renderscript.ScriptIntrinsicBlur
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import java.net.HttpURLConnection
+import java.net.URL
 
 class SpotifyNotificationListener : NotificationListenerService() {
 
@@ -180,6 +183,39 @@ class SpotifyNotificationListener : NotificationListenerService() {
         return null
     }
 
+    private fun getHighResAlbumArtFromUri(metadata: MediaMetadata): Bitmap? {
+        val artUri = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
+            ?: metadata.getString(MediaMetadata.METADATA_KEY_ART_URI)
+            ?: return null
+
+        return try {
+            val connection = (URL(artUri).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 3000
+                readTimeout = 5000
+                doInput = true
+                instanceFollowRedirects = true
+            }
+
+            connection.connect()
+            val stream = connection.inputStream
+            val options = BitmapFactory.Options().apply {
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+                inScaled = false
+            }
+            val bitmap = BitmapFactory.decodeStream(stream, null, options)
+            stream.close()
+            connection.disconnect()
+
+            if (bitmap != null) {
+                Log.d("DynamicLock", "Using metadata URI art: ${bitmap.width}x${bitmap.height}")
+            }
+            bitmap
+        } catch (e: Exception) {
+            Log.w("DynamicLock", "Album art URI fetch failed: ${e.message}")
+            null
+        }
+    }
+
     private fun processMetadata(metadata: MediaMetadata) {
         val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE)
         val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST)
@@ -216,7 +252,14 @@ class SpotifyNotificationListener : NotificationListenerService() {
             return
         }
 
-        // Try notification art first (can be higher res)
+        // Try metadata album-art URL first (usually highest quality from Spotify CDN).
+        val uriBitmap = getHighResAlbumArtFromUri(freshMetadata)
+        if (uriBitmap != null) {
+            setLockWallpaper(uriBitmap, generation)
+            return
+        }
+
+        // Fallback to notification art (can still be high res).
         val highResBitmap = getHighResAlbumArt(null)
         if (highResBitmap != null) {
             Log.d("DynamicLock", "Using notification art: ${highResBitmap.width}x${highResBitmap.height}")
@@ -334,8 +377,12 @@ class SpotifyNotificationListener : NotificationListenerService() {
         paint.isFilterBitmap = true
         paint.isDither = true
 
-        // Album art: slightly smaller for better visual balance and less perceived softness.
-        val artSize = (targetWidth * 0.75f).toInt()
+        // Keep art visually large, but still avoid extreme upscaling on very small covers.
+        val desiredArtSize = (targetWidth * 0.78f).toInt()
+        val minVisualSize = (targetWidth * 0.62f).toInt()
+        val sourceMinSide = minOf(albumArt.width, albumArt.height)
+        val maxSharpSize = (sourceMinSide * 1.8f).toInt().coerceAtLeast(1)
+        val artSize = minOf(desiredArtSize, maxOf(minVisualSize, maxSharpSize))
         val left = (targetWidth - artSize) / 2f
         val top = (targetHeight - artSize) / 2f
 
