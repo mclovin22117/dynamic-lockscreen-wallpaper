@@ -16,8 +16,8 @@ val spotifyCoverApiBaseUrl = (localProperties.getProperty("spotify.cover.api.bas
 val spotifyCoverApiAuthToken = (localProperties.getProperty("spotify.cover.api.authToken") ?: "").trim()
 val spotifyCoverApiBaseUrlDebug = (localProperties.getProperty("spotify.cover.api.baseUrl.debug") ?: spotifyCoverApiBaseUrl).trim()
 val spotifyCoverApiAuthTokenDebug = (localProperties.getProperty("spotify.cover.api.authToken.debug") ?: spotifyCoverApiAuthToken).trim()
-val spotifyCoverApiBaseUrlRelease = (localProperties.getProperty("spotify.cover.api.baseUrl.release") ?: "").trim()
-val spotifyCoverApiAuthTokenRelease = (localProperties.getProperty("spotify.cover.api.authToken.release") ?: "").trim()
+val spotifyCoverApiBaseUrlRelease = (localProperties.getProperty("spotify.cover.api.baseUrl.release") ?: spotifyCoverApiBaseUrl).trim()
+val spotifyCoverApiAuthTokenRelease = (localProperties.getProperty("spotify.cover.api.authToken.release") ?: spotifyCoverApiAuthToken).trim()
 
 plugins {
     alias(libs.plugins.android.application)
