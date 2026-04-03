@@ -6,6 +6,24 @@ DynamicLock is a free and open source Android app that automatically updates you
 
 ---
 
+## ✅ For End Users
+
+If you just want to use the app:
+
+- Install the APK
+- Grant Notification Access
+- Play music on Spotify
+
+You do **not** need to create or add any Spotify API keys.
+
+---
+
+## 🛠️ For Developers
+
+If you want to build, test, or contribute to this project from source, follow the development setup sections below.
+
+---
+
 ## ✨ How It Works
 
 1. Install the app
@@ -26,11 +44,11 @@ Phone App → Backend Server → Spotify Web API → Album Art (high-res)
 ```
 
 - **Android App**: Detects playing song, requests album art from backend
-- **Backend**: Holds your Spotify credentials securely, exchanges them for Spotify access token, fetches album metadata
+- **Backend**: Holds API credentials securely, exchanges them for Spotify access token, fetches album metadata
 - **Spotify Web API**: Returns the highest-quality album image available
 
 This ensures:
-- ✅ Your Spotify credentials are **never** embedded in the APK
+- ✅ API credentials are **never** embedded in the APK
 - ✅ Album art is always the **highest quality** available
 - ✅ No user login required
 - ✅ Fast, cached responses
@@ -46,13 +64,17 @@ This ensures:
 | ✅ | No user data collected |
 | ✅ | No tracking or analytics |
 | ✅ | No ads |
-| ✅ | Your Spotify credentials never leave your backend server |
+| ✅ | API credentials stay on backend server only |
 | ✅ | Backend only fetches public album metadata |
 | ✅ | Open source — audit it yourself |
 
 **What gets sent to the backend?**
 - Only the Spotify track ID (e.g., `3n3Ppam7vgaVa1iaRUc9Lp`)
-- Your backend then exchanges your Spotify Client ID/Secret for an access token and fetches album metadata
+- The backend then exchanges its configured API credentials for an access token and fetches album metadata
+
+**Do users need their own API key?**
+- No. The app uses backend-configured API credentials to fetch album covers.
+- Normal users only install the APK and grant required permissions.
 
 **What about the host running the backend?**
 - If you deploy the backend on your own server, only you see the traffic
@@ -86,10 +108,10 @@ Want to contribute or test DynamicLock locally? Follow these steps:
 ### Prerequisites
 - **Backend**: Python 3.8+, pip
 - **Android**: Android Studio (latest), JDK 17+, Android SDK (API 36)
-- **Spotify**: Developer account (free) with Client ID and Secret
+- **Spotify** (only if self-hosting backend): Developer account (free) with Client ID and Secret
 - **Device**: Android phone (7.0+) connected via USB, or Android emulator
 
-### Step 1: Get Spotify Credentials
+### Step 1: Configure Backend Credentials (Self-Hosting Only)
 
 1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
 2. Create a new app (accept terms, fill in details)

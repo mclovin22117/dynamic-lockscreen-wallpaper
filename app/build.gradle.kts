@@ -33,8 +33,8 @@ android {
         applicationId = "com.example.dynamiclock"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "SPOTIFY_COVER_API_BASE_URL", "\"\"")
